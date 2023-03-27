@@ -139,3 +139,12 @@ def test_get_all_with_condition(repo, custom_class):
     res = repo.get_all({'field_int': 0})
     assert res == [objs[0]]
     assert repo.get_all({'field_str': FILED_STR}) == objs
+
+
+def test__resolve_type(repo):
+    assert repo._resolve_type(type('abc')) == 'TEXT'
+    assert repo._resolve_type(type(1)) == 'INTEGER'
+    assert repo._resolve_type(type(1.23)) == 'REAL'
+    assert repo._resolve_type(type([])) == 'TEXT'
+    assert repo._resolve_type(type(datetime.now())) == 'TIMESTAMP'
+    assert repo._resolve_type(type(int | None)) == 'TEXT'

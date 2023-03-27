@@ -4,7 +4,8 @@
 
 import sqlite3
 from inspect import get_annotations
-from typing import Any
+from typing import Any, get_args
+from types import UnionType
 from datetime import datetime, date
 
 from bookkeeper.repository.abstract_repository import AbstractRepository, T
@@ -15,15 +16,12 @@ class SQLiteRepository(AbstractRepository[T]):
     Основной репозиторий для работы с SQLite.
     """
 
-    DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-
     def __init__(self, db_file: str, cls: type) -> None:
         self.db_file = db_file
         self.table_name = cls.__name__.lower()
         self.fields = get_annotations(cls, eval_str=True)
         self.fields.pop('pk')
         self.cls = cls
-        # Creating queries
         names = ', '.join(self.fields.keys())
         placeholders = ', '.join("?" * len(self.fields))
         fields_update = ", ".join([f"{field}=?" for field in self.fields.keys()])
@@ -35,6 +33,14 @@ class SQLiteRepository(AbstractRepository[T]):
             'update': f'UPDATE {self.table_name} SET {fields_update} WHERE pk = ?',
             'delete': f'DELETE FROM {self.table_name} WHERE pk = ?',
         }
+        types_for_table = [f"{name} {self._resolve_type(type)}" 
+                           for name, type in self.fields.items()]
+        create_table = f'CREATE TABLE IF NOT EXISTS {self.table_name} (' \
+            + f'{", ".join(types_for_table)}, pk INTEGER PRIMARY KEY )'
+        with sqlite3.connect(self.db_file) as con:
+            cur = con.cursor()
+            cur.execute(self.queries['foreign_keys'])
+            cur.execute(create_table)
 
     def add(self, obj: T) -> int:
         if getattr(obj, 'pk', None) != 0:
@@ -109,8 +115,8 @@ class SQLiteRepository(AbstractRepository[T]):
         for field_name, field_value in zip(self.fields.keys(), values[1:]):
             field_type = self.fields[field_name]
             if field_type == datetime:
-                field_value = datetime.strptime(field_value, self.DEFAULT_DATE_FORMAT)
-            if self.fields[field_name] == date:
+                field_value = datetime.fromisoformat(field_value)
+            if field_type == date:
                 field_value = date.fromisoformat(field_value)
 
             class_arguments[field_name] = field_value
@@ -118,3 +124,21 @@ class SQLiteRepository(AbstractRepository[T]):
         obj = self.cls(**class_arguments)
         obj.pk = values[0]
         return obj  # type: ignore
+    
+    @staticmethod
+    def _resolve_type(obj_type: type) -> str:
+        """
+            Вспомогательный метод для соответствия типов данных 
+            питоновских и SQLite
+        """
+        if issubclass(UnionType, obj_type):
+            obj_type = get_args(obj_type)
+        if issubclass(str, obj_type):
+            return 'TEXT'
+        if issubclass(int, obj_type):
+            return 'INTEGER'
+        if issubclass(float, obj_type):
+            return 'REAL'
+        if issubclass(datetime, obj_type):
+            return 'TIMESTAMP'
+        return 'TEXT'
