@@ -33,7 +33,7 @@ class SQLiteRepository(AbstractRepository[T]):
             'update': f'UPDATE {self.table_name} SET {fields_update} WHERE pk = ?',
             'delete': f'DELETE FROM {self.table_name} WHERE pk = ?',
         }
-        types_for_table = [f"{name} {self._resolve_type(type)}" 
+        types_for_table = [f"{name} {self._resolve_type(type)}"
                            for name, type in self.fields.items()]
         create_table = f'CREATE TABLE IF NOT EXISTS {self.table_name} (' \
             + f'{", ".join(types_for_table)}, pk INTEGER PRIMARY KEY )'
@@ -124,15 +124,15 @@ class SQLiteRepository(AbstractRepository[T]):
         obj = self.cls(**class_arguments)
         obj.pk = values[0]
         return obj  # type: ignore
-    
+
     @staticmethod
     def _resolve_type(obj_type: type) -> str:
         """
-            Вспомогательный метод для соответствия типов данных 
+            Вспомогательный метод для соответствия типов данных
             питоновских и SQLite
         """
         if issubclass(UnionType, obj_type):
-            obj_type = get_args(obj_type)
+            obj_type = get_args(obj_type)  # type: ignore
         if issubclass(str, obj_type):
             return 'TEXT'
         if issubclass(int, obj_type):
